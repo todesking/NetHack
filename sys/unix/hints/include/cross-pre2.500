@@ -334,6 +334,9 @@ override TARGET_AR = emar
 WASM_CFLAGS = -Wall -Wextra -Wno-missing-field-initializers
 WASM_CFLAGS += -Wimplicit -Wreturn-type -Wunused -Wformat -Wswitch
 WASM_CFLAGS += -Wshadow
+# newer clang (emscripten >= 6.0) flags write-only globals/variables in vendor
+# code; must come after -Wunused which would otherwise re-enable them
+WASM_CFLAGS += -Wno-unused-but-set-global -Wno-unused-but-set-variable
 # WASM_CFLAGS += -Wwrite-strings
 # WASM_CFLAGS += -Werror
 # Nethack C flags
