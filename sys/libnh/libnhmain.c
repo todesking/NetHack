@@ -899,11 +899,14 @@ EM_JS(void, js_helpers_init, (), {
             setValue(ptr, value, "*");
             break;
         case "s":
+            if (value === null || value === undefined)
+                value = "";
             if(typeof value !== "string")
                 throw new TypeError(`expected ${name} return type to be string`);
-            // value=value?value:"(no value)";
-            // var strPtr = getValue(ptr, "i32");
-            stringToUTF8(value, ptr, 1024); // TODO: uhh... danger will robinson
+            // ptr is a char buffer of at least 1024 bytes: either a
+            // global char array or the static buffer handed over by
+            // winshim.c's SDECLCB (keep in sync with SHIM_STRBUF_SZ)
+            stringToUTF8(value, ptr, 1024);
             break;
         case "i":
             if(typeof value !== "number" || !Number.isInteger(value))

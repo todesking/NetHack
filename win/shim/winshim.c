@@ -22,6 +22,11 @@
 #define debugf(...)
 #endif /* SHIM_DEBUG */
 
+/* Size of the static buffer handed to string-returning callbacks.
+ * Must match the write limit in setPointerValue()'s "s" case
+ * (sys/libnh/libnhmain.c). */
+#define SHIM_STRBUF_SZ 1024
+
 
 /* shim_graphics_callback is the primary interface to shim graphics,
  * call this function with your declared callback function
@@ -76,6 +81,26 @@ void name fn_args { \
     debugf("SHIM GRAPHICS: " #name " done.\n"); \
 }
 
+/* String-returning callbacks must not use DECLCB: it would pass the
+ * address of a 4-byte `char *ret` local as ret_ptr, and the JS side
+ * writes the string bytes themselves (up to SHIM_STRBUF_SZ) through
+ * that pointer, smashing the stack.  Hand it a persistent buffer
+ * instead, and return NULL for an empty result so callers that
+ * iterate until NULL (e.g. getmsghistory) still terminate. */
+#define SDECLCB(name, fn_args, fmt, ...) \
+char *name fn_args; \
+\
+char *name fn_args { \
+    void *args[] = { __VA_ARGS__ }; \
+    static char retbuf[SHIM_STRBUF_SZ]; \
+    retbuf[0] = '\0'; \
+    debugf("SHIM GRAPHICS: " #name "\n"); \
+    if (!shim_callback_name) return NULL; \
+    local_callback(shim_callback_name, #name, (void *)retbuf, fmt, args); \
+    debugf("SHIM GRAPHICS: " #name " done.\n"); \
+    return retbuf[0] ? retbuf : NULL; \
+}
+
 #else /* !__EMSCRIPTEN__ */
 
 /************
@@ -111,6 +136,20 @@ void name fn_args { \
     if (!shim_graphics_callback) return; \
     shim_graphics_callback(#name, NULL, fmt, ## __VA_ARGS__); \
     debugf("SHIM GRAPHICS: " #name " done.\n"); \
+}
+
+/* see the __EMSCRIPTEN__ variant for why string returns need a buffer */
+#define SDECLCB(name, fn_args, fmt, ...) \
+char *name fn_args;\
+\
+char *name fn_args { \
+    static char retbuf[SHIM_STRBUF_SZ]; \
+    retbuf[0] = '\0'; \
+    debugf("SHIM GRAPHICS: " #name "\n"); \
+    if (!shim_graphics_callback) return NULL; \
+    shim_graphics_callback(#name, (void *)retbuf, fmt, ## __VA_ARGS__); \
+    debugf("SHIM GRAPHICS: " #name " done.\n"); \
+    return retbuf[0] ? retbuf : NULL; \
 }
 #endif /* __EMSCRIPTEN__ */
 
@@ -156,10 +195,10 @@ VDECLCB(shim_delay_output,(void), "v")
 VDECLCB(shim_change_color,(int color, long rgb, int reverse), "viii", A2P color, A2P rgb, A2P reverse)
 VDECLCB(shim_change_background,(int white_or_black), "vi", A2P white_or_black)
 DECLCB(short, set_shim_font_name,(winid window_type, char *font_name),"2is", A2P window_type, P2V font_name)
-DECLCB(char *,shim_get_color_string,(void),"sv")
+SDECLCB(shim_get_color_string,(void),"sv")
 
 VDECLCB(shim_preference_update, (const char *pref), "vp", P2V pref)
-DECLCB(char *,shim_getmsghistory, (boolean init), "sb", A2P init)
+SDECLCB(shim_getmsghistory, (boolean init), "sb", A2P init)
 VDECLCB(shim_putmsghistory, (const char *msg, boolean restoring_msghist), "vsb", P2V msg, A2P restoring_msghist)
 VDECLCB(shim_status_init, (void), "v")
 VDECLCB(shim_status_enablefield,
@@ -299,7 +338,17 @@ EM_JS(void, local_callback, (const char *cb_name, const char *shim_name, void *r
             try {
                 wakeUp();
             } catch (e) {
-                
+                // exit() during the Asyncify resume throws ExitStatus (or
+                // "unwind"); that is the normal shutdown path.  Anything
+                // else is a real error (e.g. a WASM trap caused by bad
+                // data written by the callback) -- swallowing it would
+                // turn the bug into a silent freeze.
+                if (e === "unwind"
+                    || (typeof ExitStatus === "function" && e instanceof ExitStatus)) {
+                    return;
+                }
+                console.error(`NetHack: resuming after '${name}' callback failed:`, e);
+                throw e;
             }
         });
 
