@@ -347,6 +347,10 @@ WASM_CFLAGS += -I../include
 # NetHack sources control
 WASM_CFLAGS += -DDLB
 WASM_CFLAGS += -DHACKDIR=\"$(HACKDIR)\"
+# Writable artifacts (record/logfile/bones/paniclog) live under /save so the
+# embedding page can persist that one directory; VAR_PLAYGROUND also turns on
+# PREFIXES_IN_USE, without which fqname() ignores fqn_prefix entirely.
+WASM_CFLAGS += -DVAR_PLAYGROUND=\"/save\"
 WASM_CFLAGS += -DDEFAULT_WINDOW_SYS=\"shim\" \
 #override TARGET_CFLAGS += -DGREPPATH=\"/usr/bin/grep\"
 WASM_CFLAGS += -DNOMAIL

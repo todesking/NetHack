@@ -173,6 +173,16 @@ nhmain(int argc, char *argv[])
     js_helpers_init();
     js_constants_init();
     js_globals_init();
+
+    /* The embedding page mounts persistent storage (IDBFS) at /save;
+       steer everything that should survive a page reload there.
+       SAVEPREFIX stays empty because SAVEF already begins with "save/".
+       LEVELPREFIX and LOCKPREFIX intentionally stay in the transient
+       in-memory FS: a stale lock left behind by a closed tab must not
+       block the next session. */
+    gf.fqn_prefix[SCOREPREFIX] = dupstr("/save/");
+    gf.fqn_prefix[BONESPREFIX] = dupstr("/save/");
+    gf.fqn_prefix[TROUBLEPREFIX] = dupstr("/save/");
 #endif
 
 #ifdef _M_UNIX

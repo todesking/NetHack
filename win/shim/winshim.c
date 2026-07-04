@@ -153,11 +153,55 @@ char *name fn_args { \
 }
 #endif /* __EMSCRIPTEN__ */
 
-VDECLCB(shim_init_nhwindows,(int *argcp, char **argv), "vpp", P2V argcp, P2V argv)
+/* init/exit are written out by hand instead of via VDECLCB because the
+ * window port owns iflags.window_inited: the core checks it before doing
+ * end-of-game window output and before calling exit_nhwindows() (see
+ * really_done()), so a port that never sets it plays the whole endgame
+ * silently and never delivers the exit callback. */
+void shim_init_nhwindows(int *argcp, char **argv);
+void
+shim_init_nhwindows(int *argcp, char **argv)
+{
+    debugf("SHIM GRAPHICS: shim_init_nhwindows\n");
+#ifdef __EMSCRIPTEN__
+    if (shim_callback_name) {
+        void *args[] = { P2V argcp, P2V argv };
+
+        local_callback(shim_callback_name, "shim_init_nhwindows", NULL,
+                       "vpp", args);
+    }
+#else
+    if (shim_graphics_callback)
+        shim_graphics_callback("shim_init_nhwindows", NULL, "vpp",
+                               P2V argcp, P2V argv);
+#endif
+    iflags.window_inited = TRUE;
+    debugf("SHIM GRAPHICS: shim_init_nhwindows done.\n");
+}
+
+void shim_exit_nhwindows(const char *str);
+void
+shim_exit_nhwindows(const char *str)
+{
+    debugf("SHIM GRAPHICS: shim_exit_nhwindows\n");
+#ifdef __EMSCRIPTEN__
+    if (shim_callback_name) {
+        void *args[] = { P2V str };
+
+        local_callback(shim_callback_name, "shim_exit_nhwindows", NULL,
+                       "vs", args);
+    }
+#else
+    if (shim_graphics_callback)
+        shim_graphics_callback("shim_exit_nhwindows", NULL, "vs", P2V str);
+#endif
+    iflags.window_inited = FALSE;
+    debugf("SHIM GRAPHICS: shim_exit_nhwindows done.\n");
+}
+
 DECLCB(boolean, shim_player_selection_or_tty,(void), "b")
 VDECLCB(shim_askname,(void), "v")
 VDECLCB(shim_get_nh_event,(void), "v")
-VDECLCB(shim_exit_nhwindows,(const char *str), "vs", P2V str)
 VDECLCB(shim_suspend_nhwindows,(const char *str), "vs", P2V str)
 VDECLCB(shim_resume_nhwindows,(void), "v")
 DECLCB(winid, shim_create_nhwindow, (int type), "ii", A2P type)
