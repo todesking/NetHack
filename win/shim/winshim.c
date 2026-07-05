@@ -277,6 +277,36 @@ shim_ctrl_nhwindow(
     win_request_info *wri UNUSED) {
     return (win_request_info *) 0;
 }
+
+/* Synchronous cell description for the client (the farlook / getpos
+ * autodescribe text).  Called from JS via ccall while the core sits
+ * suspended in an input callback; do_screen_description() only builds
+ * strings from remembered glyphs, so it never re-enters the window
+ * procs (no Asyncify re-suspend).
+ * Returns "firstmatch\nfull_description", or "" when the cell is out
+ * of range or nothing is known about it. */
+const char *shim_describe_cell(int x, int y);
+
+EMSCRIPTEN_KEEPALIVE
+const char *
+shim_describe_cell(int x, int y)
+{
+    static char retbuf[SHIM_STRBUF_SZ];
+    char out_str[BUFSZ];
+    const char *firstmatch = 0;
+    coord cc;
+
+    retbuf[0] = '\0';
+    if (x < 1 || x >= COLNO || y < 0 || y >= ROWNO)
+        return retbuf;
+    cc.x = (coordxy) x;
+    cc.y = (coordxy) y;
+    if (do_screen_description(cc, TRUE, 0, out_str, &firstmatch,
+                              (struct permonst **) 0) > 0
+        && firstmatch && *firstmatch)
+        Snprintf(retbuf, sizeof retbuf, "%s\n%s", firstmatch, out_str);
+    return retbuf;
+}
 #else /* !__EMSCRIPTEN__ */
 VDECLCB(shim_player_selection, (void), "v")
 VDECLCB(shim_update_inventory,(int a1 UNUSED), "vi", A2P a1)
